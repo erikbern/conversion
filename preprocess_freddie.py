@@ -29,7 +29,7 @@ def date_fmt(x):
     else:
         return '%s-%s-01' % (x[0:4], x[4:6])
 
-with open('data.tsv', 'w') as f:
+with open('data_freddie.tsv', 'w') as f:
     for k, month in created.items():
         f.write('%s\t%s\t%s\n' % (date_fmt(month), date_fmt(defaulted.get(k, '')), date_fmt(terminated.get(k, ''))))
 

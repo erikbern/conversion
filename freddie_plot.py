@@ -1,4 +1,4 @@
-import datetime, lifelines, seaborn
+import datetime, numpy, seaborn
 from matplotlib import pyplot
 
 def parse(date):
@@ -8,32 +8,46 @@ def parse(date):
         return None
 
 data = []
-for line in open('data_freddie.tsv'):
+for line in open('freddie_data.tsv'):
     line = line.strip('\n').split('\t')
     data.append(tuple(parse(item) for item in line))
 
-
-# Compute Kaplan-Meier
 now = max(c for c, d, e in data)
-T, E = [], []
-for created, defaulted, ended in data:
+events = []
+YEAR = 365.25 * 24 * 60 * 60
+for created, defaulted, prepaid in data:
     if defaulted:
-        t, e = (defaulted - created).total_seconds(), True
-    elif ended:
-        t, e = float('inf'), True
+        events.append(((defaulted - created).total_seconds() / YEAR, True))
+    elif prepaid:
+        events.append(((prepaid - created).total_seconds() / YEAR, False))
     else:
-        t, e = (now - created).total_seconds(), False
-    T.append(t / (365 * 24 * 60 * 60))
-    E.append(e)
+        events.append(((now - created).total_seconds() / YEAR, None))
 
-print('fitting')
-kmf = lifelines.KaplanMeierFitter()
-kmf.fit(T, event_observed=E)
-t = kmf.survival_function_.index.values
-p = 1.0 - kmf.survival_function_['KM_estimate'].values
-p_hi = 1.0 - kmf.confidence_interval_['KM_estimate_lower_0.95'].values
-p_lo = 1.0 - kmf.confidence_interval_['KM_estimate_upper_0.95'].values
-color = 'red'
-pyplot.plot(t, 100. * p, color=color) #, label=label)
-pyplot.fill_between(t, 100. * p_lo, 100. * p_hi, color=color, alpha=0.2)
+# Compute a cohort plot by just averaging
+events.sort()
+
+n_act, n_def, n_pre = len(events), 0, 0
+ns_act, ns_def, ns_pre = [n_act], [n_def], [n_pre]
+
+for t, event in events:
+    if event == True:
+        n_def += 1
+    elif event == False:
+        n_pre += 1
+    n_act -= 1
+    if n_act == 0:
+        break
+    ns_act.append(n_act)
+    ns_def.append(n_def)
+    ns_pre.append(n_pre)
+
+ns_act, ns_def, ns_pre = [numpy.array(x) for x in (ns_act, ns_def, ns_pre)]
+ns_sum = ns_act + ns_def + ns_pre
+ts = [t for t, _ in events]
+
+c_def, c_act, c_pre = seaborn.color_palette('hls', 3)
+pyplot.fill_between(ts, 0. * ns_def / ns_sum, 100. * ns_def / ns_sum, color=c_def, label='Defaulted')
+pyplot.fill_between(ts, 100. * ns_def / ns_sum, 100. * (ns_def + ns_pre) / ns_sum, color=c_pre, label='Prepaid')
+pyplot.fill_between(ts, 100. * (ns_def + ns_pre) / ns_sum, 100. * ns_sum / ns_sum, color=c_act, label='Still active')
+pyplot.legend(loc='upper left')
 pyplot.show()
